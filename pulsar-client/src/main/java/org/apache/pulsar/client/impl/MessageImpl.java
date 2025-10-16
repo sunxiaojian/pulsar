@@ -38,8 +38,10 @@ import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import lombok.Getter;
+import org.apache.pulsar.client.api.CompressionType;
 import org.apache.pulsar.client.api.Message;
 import org.apache.pulsar.client.api.MessageId;
+import org.apache.pulsar.client.api.MessageIdAdv;
 import org.apache.pulsar.client.api.Schema;
 import org.apache.pulsar.client.api.SchemaSerializationException;
 import org.apache.pulsar.client.impl.schema.AbstractSchema;
@@ -54,6 +56,7 @@ import org.apache.pulsar.common.protocol.Commands;
 import org.apache.pulsar.common.protocol.schema.BytesSchemaVersion;
 import org.apache.pulsar.common.protocol.schema.SchemaHash;
 import org.apache.pulsar.common.schema.KeyValueEncodingType;
+import org.apache.pulsar.common.schema.SchemaIdUtil;
 import org.apache.pulsar.common.schema.SchemaInfo;
 import org.apache.pulsar.common.schema.SchemaType;
 
@@ -305,6 +308,13 @@ public class MessageImpl<T> implements Message<T> {
         return msg;
     }
 
+    public static MessageImpl<byte[]> deserializeMetadataWithEmptyPayload(
+            ByteBuf headersAndPayloadWithBrokerEntryMetadata) throws IOException {
+        MessageImpl<byte[]> msg = deserializeSkipBrokerEntryMetaData(headersAndPayloadWithBrokerEntryMetadata);
+        msg.payload = Unpooled.EMPTY_BUFFER;
+        return msg;
+    }
+
     public void setReplicatedFrom(String cluster) {
         msgMetadata.setReplicatedFrom(cluster);
     }
@@ -415,6 +425,15 @@ public class MessageImpl<T> implements Message<T> {
         }
     }
 
+    @Override
+    public Optional<byte[]> getSchemaId() {
+        if (msgMetadata.hasSchemaId()) {
+            byte[] schemaId = msgMetadata.getSchemaId();
+            return (schemaId.length == 0) ? Optional.empty() : Optional.of(schemaId);
+        }
+        return Optional.empty();
+    }
+
     private void ensureSchemaIsLoaded() {
         if (schema instanceof AutoConsumeSchema) {
             ((AutoConsumeSchema) schema).fetchSchemaIfNeeded(BytesSchemaVersion.of(getSchemaVersion()));
@@ -455,7 +474,12 @@ public class MessageImpl<T> implements Message<T> {
     @Override
     public T getValue() {
         SchemaInfo schemaInfo = getSchemaInfo();
+        var schemaIdOp = getSchemaId();
+        var schemaId = schemaIdOp.map(SchemaIdUtil::removeMagicHeader).orElse(null);
         if (schemaInfo != null && SchemaType.KEY_VALUE == schemaInfo.getType()) {
+            if (schemaIdOp.isPresent()) {
+                return getKeyValueBySchemaId(schemaId);
+            }
             if (schema.supportSchemaVersioning()) {
                 return getKeyValueBySchemaVersion();
             } else {
@@ -464,6 +488,9 @@ public class MessageImpl<T> implements Message<T> {
         } else {
             if (msgMetadata.isNullValue()) {
                 return null;
+            }
+            if (schemaIdOp.isPresent()) {
+                return decodeBySchemaId(schemaId);
             }
             // check if the schema passed in from client supports schema versioning or not
             // this is an optimization to only get schema version when necessary
@@ -505,6 +532,15 @@ public class MessageImpl<T> implements Message<T> {
         }
     }
 
+    private T decodeBySchemaId(byte[] schemaId) {
+        try {
+            return schema.decode(topic, getByteBuffer(), schemaId);
+        } catch (Exception e) {
+            throw new SchemaSerializationException("Failed to decode message from topic " + topic
+                    + " with schemaId " + Base64.getEncoder().encodeToString(schemaId), e);
+        }
+    }
+
     private ByteBuffer getByteBuffer() {
         if (msgMetadata.isNullValue()) {
             return null;
@@ -526,6 +562,20 @@ public class MessageImpl<T> implements Message<T> {
             }
         } else {
             return decode(schemaVersion);
+        }
+    }
+
+    private T getKeyValueBySchemaId(byte[] schemaId) {
+        if (schema instanceof AutoConsumeSchema) {
+            throw new UnsupportedOperationException("AutoConsumeSchema is not supported with schemaId");
+        }
+        if (!(schema instanceof KeyValueSchemaImpl<?, ?> kvSchema)) {
+            throw new IllegalStateException("The schema is not a KeyValueSchema");
+        }
+        if (kvSchema.getKeyValueEncodingType() == KeyValueEncodingType.SEPARATED) {
+            return (T) kvSchema.decode(topic, getKeyBytes(), getData(), schemaId);
+        } else {
+            return decodeBySchemaId(schemaId);
         }
     }
 
@@ -714,9 +764,10 @@ public class MessageImpl<T> implements Message<T> {
     @Override
     public Optional<Long> getIndex() {
         if (brokerEntryMetadata != null && brokerEntryMetadata.hasIndex()) {
-            if (msgMetadata.hasNumMessagesInBatch() && messageId instanceof BatchMessageIdImpl) {
-                int batchSize = ((BatchMessageIdImpl) messageId).getBatchSize();
-                int batchIndex = ((BatchMessageIdImpl) messageId).getBatchIndex();
+            MessageIdAdv messageIdAdv = (MessageIdAdv) messageId;
+            if (msgMetadata.hasNumMessagesInBatch() && MessageIdAdvUtils.isBatch(messageIdAdv)) {
+                int batchSize = messageIdAdv.getBatchSize();
+                int batchIndex = messageIdAdv.getBatchIndex();
                 return Optional.of(brokerEntryMetadata.getIndex() - batchSize + batchIndex + 1);
             }
             return Optional.of(brokerEntryMetadata.getIndex());
@@ -769,6 +820,10 @@ public class MessageImpl<T> implements Message<T> {
 
     int getUncompressedSize() {
         return uncompressedSize;
+    }
+
+    CompressionType getCompressionType() {
+        return CompressionType.valueOf(msgMetadata.getCompression().name());
     }
 
     SchemaState getSchemaState() {

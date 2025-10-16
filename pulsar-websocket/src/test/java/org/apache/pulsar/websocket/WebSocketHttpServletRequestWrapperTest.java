@@ -18,11 +18,12 @@
  */
 package org.apache.pulsar.websocket;
 
+import lombok.Cleanup;
 import org.apache.pulsar.common.configuration.PulsarConfigurationLoader;
 import org.apache.pulsar.websocket.service.WebSocketProxyConfiguration;
 import org.eclipse.jetty.websocket.servlet.UpgradeHttpServletRequest;
-import org.testng.Assert;
 import org.mockito.Mockito;
+import org.testng.Assert;
 import org.testng.annotations.Test;
 
 /**
@@ -70,6 +71,7 @@ public class WebSocketHttpServletRequestWrapperTest {
                 WebSocketProxyConfiguration.class);
         String publicKeyPath = "file://" + this.getClass().getClassLoader().getResource("my-public.key").getFile();
         config.getProperties().setProperty("tokenPublicKey", publicKeyPath);
+        @Cleanup
         WebSocketService service = new WebSocketService(config);
         service.start();
 
@@ -81,8 +83,8 @@ public class WebSocketHttpServletRequestWrapperTest {
         WebSocketHttpServletRequestWrapper webSocketHttpServletRequestWrapper =
                 new WebSocketHttpServletRequestWrapper(httpServletRequest);
 
-        Assert.assertEquals(service.getAuthenticationService().authenticateHttpRequest(webSocketHttpServletRequestWrapper),
-                "test-user");
+        Assert.assertEquals(service.getAuthenticationService()
+                        .authenticateHttpRequest(webSocketHttpServletRequestWrapper), "test-user");
     }
 
 }

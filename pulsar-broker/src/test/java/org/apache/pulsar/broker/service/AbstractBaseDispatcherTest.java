@@ -33,10 +33,11 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import org.apache.bookkeeper.mledger.Entry;
 import org.apache.bookkeeper.mledger.ManagedCursor;
+import org.apache.bookkeeper.mledger.Position;
 import org.apache.bookkeeper.mledger.impl.EntryImpl;
-import org.apache.bookkeeper.mledger.impl.PositionImpl;
 import org.apache.pulsar.broker.PulsarService;
 import org.apache.pulsar.broker.ServiceConfiguration;
+import org.apache.pulsar.broker.loadbalance.extensions.data.BrokerLookupData;
 import org.apache.pulsar.broker.service.persistent.DispatchRateLimiter;
 import org.apache.pulsar.broker.service.persistent.PersistentSubscription;
 import org.apache.pulsar.broker.service.persistent.PersistentTopic;
@@ -107,7 +108,9 @@ public class AbstractBaseDispatcherTest {
 
         List<Entry> entries = new ArrayList<>();
 
-        Entry e = EntryImpl.create(1, 2, createMessage("message1", 1));
+        ByteBuf message = createMessage("message1", 1);
+        Entry e = EntryImpl.create(1, 2, message);
+        message.release();
         long expectedBytePermits = e.getLength();
         entries.add(e);
         SendMessageInfo sendMessageInfo = SendMessageInfo.getThreadLocal();
@@ -115,15 +118,18 @@ public class AbstractBaseDispatcherTest {
 
         ManagedCursor cursor = mock(ManagedCursor.class);
 
-        int size = this.helper.filterEntriesForConsumer(entries, batchSizes, sendMessageInfo, null, cursor, false, null);
+        int size = this.helper.filterEntriesForConsumer(entries, batchSizes, sendMessageInfo,
+                null, cursor, false, null);
         assertEquals(size, 0);
-        verify(subscriptionDispatchRateLimiter).tryDispatchPermit(1, expectedBytePermits);
+        verify(subscriptionDispatchRateLimiter).consumeDispatchQuota(1, expectedBytePermits);
     }
 
     @Test
     public void testFilterEntriesForConsumerOfTxnMsgAbort() {
         List<Entry> entries = new ArrayList<>();
-        entries.add(EntryImpl.create(1, 1, createTnxAbortMessage("message1", 1)));
+        ByteBuf message = createTnxAbortMessage("message1", 1);
+        entries.add(EntryImpl.create(1, 1, message));
+        message.release();
 
         SendMessageInfo sendMessageInfo = SendMessageInfo.getThreadLocal();
         EntryBatchSizes batchSizes = EntryBatchSizes.get(entries.size());
@@ -139,7 +145,9 @@ public class AbstractBaseDispatcherTest {
         when(mockTopic.isTxnAborted(any(TxnID.class), any())).thenReturn(true);
 
         List<Entry> entries = new ArrayList<>();
-        entries.add(EntryImpl.create(1, 1, createTnxMessage("message1", 1)));
+        ByteBuf message = createTnxMessage("message1", 1);
+        entries.add(EntryImpl.create(1, 1, message));
+        message.release();
 
         SendMessageInfo sendMessageInfo = SendMessageInfo.getThreadLocal();
         EntryBatchSizes batchSizes = EntryBatchSizes.get(entries.size());
@@ -153,6 +161,7 @@ public class AbstractBaseDispatcherTest {
         ByteBuf markerMessage =
                 Markers.newReplicatedSubscriptionsSnapshotRequest("testSnapshotId", "testSourceCluster");
         entries.add(EntryImpl.create(1, 1, markerMessage));
+        markerMessage.release();
 
         SendMessageInfo sendMessageInfo = SendMessageInfo.getThreadLocal();
         EntryBatchSizes batchSizes = EntryBatchSizes.get(entries.size());
@@ -163,7 +172,9 @@ public class AbstractBaseDispatcherTest {
     @Test
     public void testFilterEntriesForConsumerOfDelayedMsg() {
         List<Entry> entries = new ArrayList<>();
-        entries.add(EntryImpl.create(1, 1, createDelayedMessage("message1", 1)));
+        ByteBuf message = createDelayedMessage("message1", 1);
+        entries.add(EntryImpl.create(1, 1, message));
+        message.release();
 
         SendMessageInfo sendMessageInfo = SendMessageInfo.getThreadLocal();
         EntryBatchSizes batchSizes = EntryBatchSizes.get(entries.size());
@@ -249,8 +260,13 @@ public class AbstractBaseDispatcherTest {
         }
 
         @Override
-        public void addConsumer(Consumer consumer) throws BrokerServiceException {
+        public String getName() {
+            return "AbstractBaseDispatcherTestHelper for subscription" + subscription.getName();
+        }
 
+        @Override
+        public CompletableFuture<Void> addConsumer(Consumer consumer) {
+            return CompletableFuture.completedFuture(null);
         }
 
         @Override
@@ -279,7 +295,8 @@ public class AbstractBaseDispatcherTest {
         }
 
         @Override
-        public CompletableFuture<Void> close() {
+        public CompletableFuture<Void> close(boolean disconnectConsumers,
+                                             Optional<BrokerLookupData> assignedBrokerLookupData) {
             return null;
         }
 
@@ -294,7 +311,8 @@ public class AbstractBaseDispatcherTest {
         }
 
         @Override
-        public CompletableFuture<Void> disconnectAllConsumers(boolean isResetCursor) {
+        public CompletableFuture<Void> disconnectAllConsumers(boolean isResetCursor,
+                                                              Optional<BrokerLookupData> assignedBrokerLookupData) {
             return null;
         }
 
@@ -314,7 +332,7 @@ public class AbstractBaseDispatcherTest {
         }
 
         @Override
-        public void redeliverUnacknowledgedMessages(Consumer consumer, List<PositionImpl> positions) {
+        public void redeliverUnacknowledgedMessages(Consumer consumer, List<Position> positions) {
 
         }
 

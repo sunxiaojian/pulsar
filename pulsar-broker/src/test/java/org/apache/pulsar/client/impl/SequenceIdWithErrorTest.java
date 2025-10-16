@@ -21,6 +21,7 @@ package org.apache.pulsar.client.impl;
 import static org.testng.Assert.assertEquals;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.opentelemetry.api.OpenTelemetry;
 import java.util.Collections;
 import lombok.Cleanup;
 import org.apache.bookkeeper.mledger.ManagedLedger;
@@ -39,14 +40,14 @@ import org.testng.annotations.Test;
 public class SequenceIdWithErrorTest extends BkEnsemblesTestBase {
 
     /**
-     * Test that sequence id from a producer is correct when there are send errors
+     * Test that sequence id from a producer is correct when there are send errors.
      */
     @Test
     public void testCheckSequenceId() throws Exception {
         admin.namespaces().createNamespace("prop/my-test", Collections.singleton("usc"));
 
         String topicName = "prop/my-test/my-topic";
-        int N = 10;
+        int num = 10;
 
         @Cleanup
         PulsarClient client = PulsarClient.builder().serviceUrl(pulsar.getBrokerServiceUrl()).build();
@@ -60,8 +61,8 @@ public class SequenceIdWithErrorTest extends BkEnsemblesTestBase {
         EventLoopGroup eventLoopGroup = new NioEventLoopGroup(1);
         ManagedLedgerClientFactory clientFactory = new ManagedLedgerClientFactory();
         clientFactory.initialize(pulsar.getConfiguration(), pulsar.getLocalMetadataStore(),
-                pulsar.getBookKeeperClientFactory(), eventLoopGroup);
-        ManagedLedgerFactory mlFactory = clientFactory.getManagedLedgerFactory();
+                pulsar.getBookKeeperClientFactory(), eventLoopGroup, OpenTelemetry.noop());
+        ManagedLedgerFactory mlFactory = clientFactory.getDefaultStorageClass().getManagedLedgerFactory();
         ManagedLedger ml = mlFactory.open(TopicName.get(topicName).getPersistenceNamingEncoding());
         ml.close();
         clientFactory.close();
@@ -69,11 +70,11 @@ public class SequenceIdWithErrorTest extends BkEnsemblesTestBase {
         // Create a producer
         Producer<String> producer = client.newProducer(Schema.STRING).topic(topicName).create();
 
-        for (int i = 0; i < N; i++) {
+        for (int i = 0; i < num; i++) {
             producer.send("Hello-" + i);
         }
 
-        for (int i = 0; i < N; i++) {
+        for (int i = 0; i < num; i++) {
             Message<String> msg = consumer.receive();
             assertEquals(msg.getValue(), "Hello-" + i);
             assertEquals(msg.getSequenceId(), i);

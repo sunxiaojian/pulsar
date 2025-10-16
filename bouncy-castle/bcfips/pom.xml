@@ -25,8 +25,7 @@
   <parent>
     <groupId>org.apache.pulsar</groupId>
     <artifactId>bouncy-castle-parent</artifactId>
-    <version>2.12.0-SNAPSHOT</version>
-    <relativePath>..</relativePath>
+    <version>4.2.0-SNAPSHOT</version>
   </parent>
 
   <artifactId>bouncy-castle-bcfips</artifactId>
@@ -38,6 +37,12 @@
       <artifactId>pulsar-common</artifactId>
       <version>${project.version}</version>
       <scope>provided</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>io.prometheus</groupId>
+          <artifactId>simpleclient_caffeine</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
 
     <dependency>

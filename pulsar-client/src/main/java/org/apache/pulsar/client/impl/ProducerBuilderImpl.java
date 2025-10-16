@@ -34,6 +34,7 @@ import org.apache.pulsar.client.api.BatcherBuilder;
 import org.apache.pulsar.client.api.CompressionType;
 import org.apache.pulsar.client.api.CryptoKeyReader;
 import org.apache.pulsar.client.api.HashingScheme;
+import org.apache.pulsar.client.api.MessageCrypto;
 import org.apache.pulsar.client.api.MessageRouter;
 import org.apache.pulsar.client.api.MessageRoutingMode;
 import org.apache.pulsar.client.api.Producer;
@@ -83,7 +84,7 @@ public class ProducerBuilderImpl<T> implements ProducerBuilder<T> {
     @Override
     public Producer<T> create() throws PulsarClientException {
         try {
-            return createAsync().get();
+            return FutureUtil.getAndCleanupOnInterrupt(createAsync(), Producer::closeAsync);
         } catch (Exception e) {
             throw PulsarClientException.unwrap(e);
         }
@@ -174,6 +175,12 @@ public class ProducerBuilderImpl<T> implements ProducerBuilder<T> {
     }
 
     @Override
+    public ProducerBuilder<T> compressionMinMsgBodySize(int compressionMinMsgBodySize) {
+        conf.setCompressMinMsgBodySize(compressionMinMsgBodySize);
+        return this;
+    }
+
+    @Override
     public ProducerBuilder<T> hashingScheme(@NonNull HashingScheme hashingScheme) {
         conf.setHashingScheme(hashingScheme);
         return this;
@@ -219,6 +226,12 @@ public class ProducerBuilderImpl<T> implements ProducerBuilder<T> {
     public ProducerBuilder<T> defaultCryptoKeyReader(@NonNull Map<String, String> publicKeys) {
         checkArgument(!publicKeys.isEmpty(), "publicKeys cannot be empty");
         return cryptoKeyReader(DefaultCryptoKeyReader.builder().publicKeys(publicKeys).build());
+    }
+
+    @Override
+    public ProducerBuilder<T> messageCrypto(MessageCrypto messageCrypto) {
+        conf.setMessageCrypto(messageCrypto);
+        return this;
     }
 
     @Override

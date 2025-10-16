@@ -75,15 +75,12 @@ public abstract class OwnerShipForCurrentServerTestBase {
             conf.setConfigurationMetadataStoreUrl("zk:localhost:3181");
             conf.setAllowAutoTopicCreationType(TopicType.NON_PARTITIONED);
             conf.setBookkeeperClientExposeStatsToPrometheus(true);
-            conf.setAcknowledgmentAtBatchIndexLevelEnabled(true);
 
             conf.setBrokerShutdownTimeoutMs(0L);
             conf.setLoadBalancerOverrideBrokerNicSpeedGbps(Optional.of(1.0d));
             conf.setBrokerServicePort(Optional.of(0));
-            conf.setBrokerServicePortTls(Optional.of(0));
             conf.setAdvertisedAddress("localhost");
             conf.setWebServicePort(Optional.of(0));
-            conf.setWebServicePortTls(Optional.of(0));
             serviceConfigurationList.add(conf);
 
             PulsarTestContext.Builder testContextBuilder =
@@ -115,7 +112,7 @@ public abstract class OwnerShipForCurrentServerTestBase {
                 pulsarClient = null;
             }
             if (pulsarTestContexts.size() > 0) {
-                for(int i = pulsarTestContexts.size() - 1; i >= 0; i--) {
+                for (int i = pulsarTestContexts.size() - 1; i >= 0; i--) {
                     pulsarTestContexts.get(i).close();
                 }
                 pulsarTestContexts.clear();

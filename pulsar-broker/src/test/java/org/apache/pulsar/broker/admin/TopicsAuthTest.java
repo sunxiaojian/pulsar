@@ -84,11 +84,14 @@ public class TopicsAuthTest extends MockedPulsarServiceBaseTest {
         Set<String> providers = new HashSet<>();
         providers.add(AuthenticationProviderToken.class.getName());
         conf.setAuthenticationProviders(providers);
+        conf.setBrokerClientAuthenticationPlugin(AuthenticationToken.class.getName());
+        conf.setBrokerClientAuthenticationParameters("token:" + ADMIN_TOKEN);
         super.internalSetup();
         PulsarAdminBuilder pulsarAdminBuilder = PulsarAdmin.builder().serviceHttpUrl(brokerUrl != null
                 ? brokerUrl.toString() : brokerUrlTls.toString())
                 .authentication(AuthenticationToken.class.getName(),
                         ADMIN_TOKEN);
+        closeAdmin();
         admin = Mockito.spy(pulsarAdminBuilder.build());
         admin.clusters().createCluster(testLocalCluster, new ClusterDataImpl());
         admin.tenants().createTenant(testTenant, new TenantInfoImpl(Set.of("role1", "role2"),
@@ -139,12 +142,12 @@ public class TopicsAuthTest extends MockedPulsarServiceBaseTest {
     private void innerTestProduce(String createTopicName, boolean isPersistent, boolean isPartition,
                                   String token, int status) throws Exception {
         String topicPrefix = null;
-        if (isPersistent == true) {
+        if (isPersistent) {
             topicPrefix = "persistent";
         } else {
             topicPrefix = "non-persistent";
         }
-        if (isPartition == true) {
+        if (isPartition) {
             admin.topics().createPartitionedTopic(topicPrefix + "://" + testTenant + "/"
                     + testNamespace + "/" + createTopicName, 5);
         } else {
@@ -157,14 +160,14 @@ public class TopicsAuthTest extends MockedPulsarServiceBaseTest {
                 writeValueAsString(schema.getSchemaInfo()));
         producerMessages.setValueSchema(ObjectMapperFactory.getMapper().getObjectMapper().
                 writeValueAsString(schema.getSchemaInfo()));
-        String message = "[" +
-                "{\"key\":\"my-key\",\"payload\":\"RestProducer:1\",\"eventTime\":1603045262772,\"sequenceId\":1}," +
-                "{\"key\":\"my-key\",\"payload\":\"RestProducer:2\",\"eventTime\":1603045262772,\"sequenceId\":2}]";
+        String message = "["
+                + "{\"key\":\"my-key\",\"payload\":\"RestProducer:1\",\"eventTime\":1603045262772,\"sequenceId\":1},"
+                + "{\"key\":\"my-key\",\"payload\":\"RestProducer:2\",\"eventTime\":1603045262772,\"sequenceId\":2}]";
         producerMessages.setMessages(createMessages(message));
 
         WebTarget root = buildWebClient();
         String requestPath = null;
-        if (isPartition == true) {
+        if (isPartition) {
             requestPath = "/topics/" + topicPrefix + "/" + testTenant + "/" + testNamespace + "/"
                     + createTopicName + "/partitions/2";
         } else {

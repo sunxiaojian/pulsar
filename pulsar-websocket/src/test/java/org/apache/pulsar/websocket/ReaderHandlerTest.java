@@ -18,25 +18,6 @@
  */
 package org.apache.pulsar.websocket;
 
-import org.apache.pulsar.client.api.Message;
-import org.apache.pulsar.client.api.MessageId;
-import org.apache.pulsar.client.api.PulsarClient;
-import org.apache.pulsar.client.api.PulsarClientException;
-import org.apache.pulsar.client.api.Reader;
-import org.apache.pulsar.client.api.ReaderBuilder;
-import org.apache.pulsar.client.impl.ConsumerImpl;
-import org.apache.pulsar.client.impl.MultiTopicsConsumerImpl;
-import org.apache.pulsar.client.impl.MultiTopicsReaderImpl;
-import org.apache.pulsar.client.impl.ReaderImpl;
-import org.eclipse.jetty.websocket.servlet.ServletUpgradeResponse;
-import org.testng.Assert;
-import org.testng.annotations.Test;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import java.io.IOException;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.anyString;
@@ -45,6 +26,27 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import java.io.IOException;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import org.apache.pulsar.client.api.Message;
+import org.apache.pulsar.client.api.MessageId;
+import org.apache.pulsar.client.api.PulsarClient;
+import org.apache.pulsar.client.api.PulsarClientException;
+import org.apache.pulsar.client.api.Reader;
+import org.apache.pulsar.client.api.ReaderBuilder;
+import org.apache.pulsar.client.api.TopicMessageId;
+import org.apache.pulsar.client.impl.ConsumerImpl;
+import org.apache.pulsar.client.impl.MultiTopicsConsumerImpl;
+import org.apache.pulsar.client.impl.MultiTopicsReaderImpl;
+import org.apache.pulsar.client.impl.ReaderImpl;
+import org.eclipse.jetty.websocket.servlet.ServletUpgradeResponse;
+import org.testng.Assert;
+import org.testng.annotations.Test;
 
 public class ReaderHandlerTest {
 
@@ -213,6 +215,16 @@ public class ReaderHandlerTest {
         @Override
         public void close() throws IOException {
 
+        }
+
+        @Override
+        public List<TopicMessageId> getLastMessageIds() throws PulsarClientException {
+            return null;
+        }
+
+        @Override
+        public CompletableFuture<List<TopicMessageId>> getLastMessageIdsAsync() {
+            return null;
         }
     }
 }

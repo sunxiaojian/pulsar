@@ -29,6 +29,7 @@ import java.util.Optional;
 import java.util.concurrent.Semaphore;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.pulsar.client.api.PulsarClientException;
+import org.apache.pulsar.client.impl.BinaryProtoLookupService;
 import org.apache.pulsar.common.api.proto.CommandGetSchema;
 import org.apache.pulsar.common.api.proto.CommandGetTopicsOfNamespace;
 import org.apache.pulsar.common.api.proto.CommandLookupTopic;
@@ -115,7 +116,7 @@ public class LookupProxyHandler {
                 log.debug("Lookup Request ID {} from {} rejected - {}.", clientRequestId, clientAddress,
                         throttlingErrorMessage);
             }
-            writeAndFlush(Commands.newLookupErrorResponse(ServerError.ServiceNotReady,
+            writeAndFlush(Commands.newLookupErrorResponse(ServerError.TooManyRequests,
                     throttlingErrorMessage, clientRequestId));
         }
 
@@ -155,7 +156,7 @@ public class LookupProxyHandler {
                     writeAndFlush(
                         Commands.newLookupErrorResponse(getServerError(t), t.getMessage(), clientRequestId));
                 } else {
-                    String brokerUrl = connectWithTLS ? r.brokerUrlTls : r.brokerUrl;
+                    String brokerUrl = resolveBrokerUrlFromLookupDataResult(r);
                     if (r.redirect) {
                         // Need to try the lookup again on a different broker
                         performLookup(clientRequestId, topic, brokerUrl, r.authoritative, numberOfRetries - 1);
@@ -184,6 +185,10 @@ public class LookupProxyHandler {
                     Commands.newLookupErrorResponse(getServerError(ex), ex.getMessage(), clientRequestId));
             return null;
         });
+    }
+
+    protected String resolveBrokerUrlFromLookupDataResult(BinaryProtoLookupService.LookupDataResult r) {
+        return connectWithTLS ? r.brokerUrlTls : r.brokerUrl;
     }
 
     public void handlePartitionMetadataResponse(CommandPartitionedTopicMetadata partitionMetadata) {
@@ -216,7 +221,7 @@ public class LookupProxyHandler {
      **/
     private void handlePartitionMetadataResponse(CommandPartitionedTopicMetadata partitionMetadata,
             long clientRequestId) {
-        TopicName topicName = TopicName.get(partitionMetadata.getTopic());
+        String topicName = TopicName.toFullTopicName(partitionMetadata.getTopic());
 
         String serviceUrl = getBrokerServiceUrl(clientRequestId);
         if (serviceUrl == null) {
@@ -230,19 +235,21 @@ public class LookupProxyHandler {
 
         if (log.isDebugEnabled()) {
             log.debug("Getting connections to '{}' for Looking up topic '{}' with clientReq Id '{}'", addr,
-                    topicName.getPartitionedTopicName(), clientRequestId);
+                    topicName, clientRequestId);
         }
         proxyConnection.getConnectionPool().getConnection(addr).thenAccept(clientCnx -> {
             // Connected to backend broker
             long requestId = proxyConnection.newRequestId();
             ByteBuf command;
-            command = Commands.newPartitionMetadataRequest(topicName.toString(), requestId);
+            command = Commands.newPartitionMetadataRequest(topicName.toString(), requestId,
+                    partitionMetadata.isMetadataAutoCreationEnabled());
             clientCnx.newLookup(command, requestId).whenComplete((r, t) -> {
                 if (t != null) {
-                    log.warn("[{}] failed to get Partitioned metadata : {}", topicName.toString(),
+                    log.warn("[{}] failed to get Partitioned metadata : {}", topicName,
                         t.getMessage(), t);
-                    writeAndFlush(Commands.newLookupErrorResponse(getServerError(t),
-                        t.getMessage(), clientRequestId));
+                    PulsarClientException pce = PulsarClientException.unwrap(t);
+                    writeAndFlush(Commands.newLookupErrorResponse(clientCnx.revertClientExToErrorCode(pce),
+                            t.getMessage(), clientRequestId));
                 } else {
                     writeAndFlush(
                         Commands.newPartitionMetadataResponse(r.partitions, clientRequestId));
@@ -335,7 +342,8 @@ public class LookupProxyHandler {
                         Commands.newError(clientRequestId, getServerError(t), t.getMessage()));
                 } else {
                     writeAndFlush(
-                        Commands.newGetTopicsOfNamespaceResponse(r.getTopics(), r.getTopicsHash(), r.isFiltered(),
+                        Commands.newGetTopicsOfNamespaceResponse(r.getNonPartitionedOrPartitionTopics(),
+                                r.getTopicsHash(), r.isFiltered(),
                                 r.isChanged(), clientRequestId));
                 }
             });

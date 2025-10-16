@@ -168,7 +168,7 @@ public class AdminApiGetLastMessageIdTest extends MockedPulsarServiceBaseTest {
                     testNamespace, "my-topic", true);
         } catch (Exception e) {
             //System.out.println(e.getMessage());
-            Assert.assertEquals("Topic not found", e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("Topic not found"));
         }
 
         String key = "legendtkl";
@@ -190,8 +190,8 @@ public class AdminApiGetLastMessageIdTest extends MockedPulsarServiceBaseTest {
 
         persistentTopics.getLastMessageId(asyncResponse, "prop", "ns-abc", "my-topic", true);
         Awaitility.await().until(() -> id[0] != null);
-        Assert.assertTrue(((MessageIdImpl)id[0]).getLedgerId() >= 0);
-        Assert.assertEquals(numberOfMessages-1, ((MessageIdImpl)id[0]).getEntryId());
+        Assert.assertTrue(((MessageIdImpl) id[0]).getLedgerId() >= 0);
+        Assert.assertEquals(numberOfMessages - 1, ((MessageIdImpl) id[0]).getEntryId());
         messageId = id[0];
 
 
@@ -204,8 +204,8 @@ public class AdminApiGetLastMessageIdTest extends MockedPulsarServiceBaseTest {
         while (id[0] == messageId) {
             Thread.sleep(1);
         }
-        Assert.assertTrue(((MessageIdImpl)id[0]).getLedgerId() > 0);
-        Assert.assertEquals( 2 * numberOfMessages -1, ((MessageIdImpl)id[0]).getEntryId());
+        Assert.assertTrue(((MessageIdImpl) id[0]).getLedgerId() > 0);
+        Assert.assertEquals(2 * numberOfMessages - 1, ((MessageIdImpl) id[0]).getEntryId());
     }
 
     /**

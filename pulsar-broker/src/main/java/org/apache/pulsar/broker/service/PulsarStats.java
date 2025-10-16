@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 import lombok.Getter;
@@ -38,7 +39,6 @@ import org.apache.pulsar.broker.stats.ClusterReplicationMetrics;
 import org.apache.pulsar.broker.stats.NamespaceStats;
 import org.apache.pulsar.common.naming.NamespaceBundle;
 import org.apache.pulsar.common.stats.Metrics;
-import org.apache.pulsar.common.util.collections.ConcurrentOpenHashMap;
 import org.apache.pulsar.policies.data.loadbalancer.NamespaceBundleStats;
 import org.apache.pulsar.utils.StatsOutputStream;
 import org.slf4j.Logger;
@@ -78,8 +78,7 @@ public class PulsarStats implements Closeable {
         this.bundleStats = new ConcurrentHashMap<>();
         this.tempMetricsCollection = new ArrayList<>();
         this.metricsCollection = new ArrayList<>();
-        this.brokerOperabilityMetrics = new BrokerOperabilityMetrics(pulsar.getConfiguration().getClusterName(),
-                pulsar.getAdvertisedAddress());
+        this.brokerOperabilityMetrics = new BrokerOperabilityMetrics(pulsar);
         this.tempNonPersistentTopics = new ArrayList<>();
 
         this.exposePublisherStats = pulsar.getConfiguration().isExposePublisherStats();
@@ -102,9 +101,7 @@ public class PulsarStats implements Closeable {
         return clusterReplicationMetrics;
     }
 
-    public synchronized void updateStats(
-            ConcurrentOpenHashMap<String, ConcurrentOpenHashMap<String, ConcurrentOpenHashMap<String, Topic>>>
-                    topicsMap) {
+    public synchronized void updateStats(Map<String, Map<String, Map<String, Topic>>> topicsMap) {
 
         StatsOutputStream topicStatsStream = new StatsOutputStream(tempTopicStatsBuf);
 
@@ -132,6 +129,7 @@ public class PulsarStats implements Closeable {
                                 k -> new NamespaceBundleStats());
                         currentBundleStats.reset();
                         currentBundleStats.topics = topics.size();
+                        brokerStats.topics += topics.size();
 
                         topicStatsStream.startObject(NamespaceBundle.getBundleRange(bundle));
 
@@ -203,11 +201,10 @@ public class PulsarStats implements Closeable {
                 }
             });
             if (clusterReplicationMetrics.isMetricsEnabled()) {
-                clusterReplicationMetrics.get().forEach(clusterMetric -> tempMetricsCollection.add(clusterMetric));
+                tempMetricsCollection.addAll(clusterReplicationMetrics.get());
                 clusterReplicationMetrics.reset();
             }
-            brokerOperabilityMetrics.getMetrics()
-                    .forEach(brokerOperabilityMetric -> tempMetricsCollection.add(brokerOperabilityMetric));
+            tempMetricsCollection.addAll(brokerOperabilityMetrics.getMetrics());
 
             // json end
             topicStatsStream.endObject();
@@ -232,7 +229,7 @@ public class PulsarStats implements Closeable {
         updatedAt = System.currentTimeMillis();
     }
 
-    public NamespaceBundleStats invalidBundleStats(String bundleName) {
+    public synchronized NamespaceBundleStats invalidBundleStats(String bundleName) {
         return bundleStats.remove(bundleName);
     }
 
@@ -253,7 +250,7 @@ public class PulsarStats implements Closeable {
         return brokerOperabilityMetrics;
     }
 
-    public Map<String, NamespaceBundleStats> getBundleStats() {
+    public synchronized Map<String, NamespaceBundleStats> getBundleStats() {
         return bundleStats;
     }
 
@@ -263,6 +260,10 @@ public class PulsarStats implements Closeable {
         } catch (Exception ex) {
             log.warn("Exception while recording topic load time for topic {}, {}", topic, ex.getMessage());
         }
+    }
+
+    public void recordTopicLoadFailed() {
+        brokerOperabilityMetrics.recordTopicLoadFailed();
     }
 
     public void recordConnectionCreate() {
@@ -279,5 +280,9 @@ public class PulsarStats implements Closeable {
 
     public void recordConnectionCreateFail() {
         brokerOperabilityMetrics.recordConnectionCreateFail();
+    }
+
+    public void recordPublishLatency(long latency, TimeUnit unit) {
+        brokerOperabilityMetrics.recordPublishLatency(latency, unit);
     }
 }

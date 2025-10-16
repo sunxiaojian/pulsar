@@ -22,7 +22,6 @@ import static org.mockito.Mockito.mock;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertTrue;
-
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
@@ -35,6 +34,7 @@ import org.apache.pulsar.client.impl.ClientCnx;
 import org.apache.pulsar.client.impl.ConsumerImpl;
 import org.apache.pulsar.common.nar.NarClassLoader;
 import org.awaitility.Awaitility;
+import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
@@ -46,7 +46,6 @@ public class ExceptionsBrokerInterceptorTest extends ProducerConsumerBase {
     public void setup() throws Exception {
         conf.setSystemTopicEnabled(false);
         conf.setTopicLevelPoliciesEnabled(false);
-        this.conf.setDisableBrokerInterceptors(false);
 
 
         this.enableBrokerInterceptor = true;
@@ -54,6 +53,7 @@ public class ExceptionsBrokerInterceptorTest extends ProducerConsumerBase {
         super.producerBaseSetup();
     }
 
+    @AfterMethod(alwaysRun = true)
     @Override
     protected void cleanup() throws Exception {
         super.internalCleanup();
@@ -95,14 +95,14 @@ public class ExceptionsBrokerInterceptorTest extends ProducerConsumerBase {
         Awaitility.await().until(() -> ((ExceptionsBrokerInterceptor) interceptor).getProducerCount().get() == 1);
         Awaitility.await().until(() -> ((ExceptionsBrokerInterceptor) interceptor).getConsumerCount().get() == 1);
 
-        for (int i = 0; i < messageNumber; i ++) {
+        for (int i = 0; i < messageNumber; i++) {
             producer.send("test".getBytes(StandardCharsets.UTF_8));
         }
 
         int receiveCounter = 0;
         Message message;
-        while((message = consumer.receive(3, TimeUnit.SECONDS)) != null) {
-            receiveCounter ++;
+        while ((message = consumer.receive(3, TimeUnit.SECONDS)) != null) {
+            receiveCounter++;
             consumer.acknowledge(message);
         }
         assertEquals(receiveCounter, 10);

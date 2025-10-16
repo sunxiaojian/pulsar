@@ -73,8 +73,8 @@ public class ProxyEncryptionPublishConsumeTest extends ProducerConsumerBase {
         config.setClusterName("test");
         config.setConfigurationMetadataStoreUrl(GLOBAL_DUMMY_VALUE);
         config.setCryptoKeyReaderFactoryClassName(CryptoKeyReaderFactoryImpl.class.getName());
-        WebSocketService service = spy(new WebSocketService(config));
-        doReturn(new ZKMetadataStore(mockZooKeeperGlobal)).when(service)
+        service = spy(new WebSocketService(config));
+        doReturn(registerCloseable(new ZKMetadataStore(mockZooKeeperGlobal))).when(service)
                 .createConfigMetadataStore(anyString(), anyInt(), anyBoolean());
         proxyServer = new ProxyServer(config);
         WebSocketServiceStarter.start(proxyServer, service);
@@ -183,32 +183,32 @@ public class ProxyEncryptionPublishConsumeTest extends ProducerConsumerBase {
 
         @Override
         public EncryptionKeyInfo getPublicKey(String keyName, Map<String, String> keyMeta) {
-            String CERT_FILE_PATH = "./src/test/resources/certificate/public-key." + keyName;
-            if (Files.isReadable(Paths.get(CERT_FILE_PATH))) {
+            String certFilePath = "./src/test/resources/certificate/public-key." + keyName;
+            if (Files.isReadable(Paths.get(certFilePath))) {
                 try {
-                    keyInfo.setKey(Files.readAllBytes(Paths.get(CERT_FILE_PATH)));
+                    keyInfo.setKey(Files.readAllBytes(Paths.get(certFilePath)));
                     return keyInfo;
                 } catch (IOException e) {
-                    Assert.fail("Failed to read certificate from " + CERT_FILE_PATH);
+                    Assert.fail("Failed to read certificate from " + certFilePath);
                 }
             } else {
-                Assert.fail("Certificate file " + CERT_FILE_PATH + " is not present or not readable.");
+                Assert.fail("Certificate file " + certFilePath + " is not present or not readable.");
             }
             return null;
         }
 
         @Override
         public EncryptionKeyInfo getPrivateKey(String keyName, Map<String, String> keyMeta) {
-            String CERT_FILE_PATH = "./src/test/resources/certificate/private-key." + keyName;
-            if (Files.isReadable(Paths.get(CERT_FILE_PATH))) {
+            String certFilePath = "./src/test/resources/certificate/private-key." + keyName;
+            if (Files.isReadable(Paths.get(certFilePath))) {
                 try {
-                    keyInfo.setKey(Files.readAllBytes(Paths.get(CERT_FILE_PATH)));
+                    keyInfo.setKey(Files.readAllBytes(Paths.get(certFilePath)));
                     return keyInfo;
                 } catch (IOException e) {
-                    Assert.fail("Failed to read certificate from " + CERT_FILE_PATH);
+                    Assert.fail("Failed to read certificate from " + certFilePath);
                 }
             } else {
-                Assert.fail("Certificate file " + CERT_FILE_PATH + " is not present or not readable.");
+                Assert.fail("Certificate file " + certFilePath + " is not present or not readable.");
             }
             return null;
         }
